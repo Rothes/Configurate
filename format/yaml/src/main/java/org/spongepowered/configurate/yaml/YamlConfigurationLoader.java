@@ -117,6 +117,28 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
         }
 
         /**
+         * Sets the preferred width to emit scalars the resultant loader should use.
+         *
+         * @param width the width size to split lines
+         * @return this builder (for chaining)
+         * @since 4.2.0
+         */
+        public Builder width(final int width) {
+            this.options.setWidth(width);
+            return this;
+        }
+
+        /**
+         * Gets the preferred width to emit scalars to be used by the resultant loader.
+         *
+         * @return the width size to split lines
+         * @since 4.2.0
+         */
+        public int width() {
+            return this.options.getWidth();
+        }
+
+        /**
          * Sets the node style the built loader should use.
          *
          * <dl><dt>Flow</dt>
