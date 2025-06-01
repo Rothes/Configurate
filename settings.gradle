@@ -9,7 +9,7 @@ pluginManagement {
 }
 
 plugins {
-    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.10.0'
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
 dependencyResolutionManagement {
@@ -29,9 +29,9 @@ dependencyResolutionManagement {
 
 enableFeaturePreview "TYPESAFE_PROJECT_ACCESSORS"
 
-if (!JavaVersion.current().java11Compatible) {
+if (JavaVersion.current() < JavaVersion.VERSION_17) {
     throw new GradleException("""\
-Configurate requires at least Java 11 to build, but you are running ${JavaVersion.current()}.
+Configurate requires at least Java 17 to build, but you are running ${JavaVersion.current()}.
 
 Your JAVA_HOME is currently: ${System.getenv("JAVA_HOME")}
 Is this correct?
