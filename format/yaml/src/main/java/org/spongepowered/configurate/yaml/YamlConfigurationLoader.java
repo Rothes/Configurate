@@ -16,6 +16,8 @@
  */
 package org.spongepowered.configurate.yaml;
 
+import net.kyori.option.Option;
+import net.kyori.option.OptionSchema;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.spongepowered.configurate.CommentedConfigurationNode;
 import org.spongepowered.configurate.ConfigurationNode;
@@ -24,11 +26,12 @@ import org.spongepowered.configurate.RepresentationHint;
 import org.spongepowered.configurate.loader.AbstractConfigurationLoader;
 import org.spongepowered.configurate.loader.CommentHandler;
 import org.spongepowered.configurate.loader.CommentHandlers;
-import org.spongepowered.configurate.loader.LoaderOptionSource;
 import org.spongepowered.configurate.util.UnmodifiableCollections;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import org.yaml.snakeyaml.representer.Representer;
 
 import java.io.BufferedReader;
 import java.io.Writer;
@@ -99,25 +102,46 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
      * @since 4.0.0
      */
     public static final class Builder extends AbstractConfigurationLoader.Builder<Builder, YamlConfigurationLoader> {
+
+        private static final OptionSchema.Mutable UNSAFE_SCHEMA = OptionSchema.childSchema(AbstractConfigurationLoader.Builder.SCHEMA);
+
+        /**
+         * A schema of options available to configure the YAML loader.
+         *
+         * @since 4.2.0
+         */
+        public static final OptionSchema SCHEMA = UNSAFE_SCHEMA.frozenView();
+
+        /**
+         * The collection node style to use globally when emitting with
+         * this loader.
+         *
+         * @see #nodeStyle(NodeStyle)
+         * @since 4.2.0
+         */
+        public static final Option<NodeStyle> NODE_STYLE = UNSAFE_SCHEMA.enumOption("yaml:node_style", NodeStyle.class, null);
+
+        /**
+         * The indent size (in spaces) to use for documents emitted by
+         * the created loader.
+         *
+         * @see #indent(int)
+         * @since 4.2.0
+         */
+        public static final Option<Integer> INDENT = UNSAFE_SCHEMA.intOption("yaml:indent", 4);
+
         private final DumperOptions options = new DumperOptions();
         private @Nullable NodeStyle style;
         private boolean enableComments;
         private int lineLength;
 
         Builder() {
-            this.indent(4);
             this.defaultOptions(o -> o.nativeTypes(NATIVE_TYPES));
-            this.from(DEFAULT_OPTIONS_SOURCE);
         }
 
         @Override
-        protected void populate(final LoaderOptionSource options) {
-            final @Nullable NodeStyle declared = options.getEnum(NodeStyle.class, "yaml", "node-style");
-            if (declared != null) {
-                this.style = declared;
-            }
-            this.enableComments = options.getBoolean(true, "yaml", "comments-enabled");
-            this.lineLength = options.getInt(150, "yaml", "line-length");
+        protected OptionSchema optionSchema() {
+            return SCHEMA;
         }
 
         /**
@@ -128,7 +152,7 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
          * @since 4.0.0
          */
         public Builder indent(final int indent) {
-            this.options.setIndent(indent);
+            this.optionStateBuilder().value(INDENT, indent);
             return this;
         }
 
@@ -139,7 +163,7 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
          * @since 4.0.0
          */
         public int indent() {
-            return this.options.getIndent();
+            return this.optionState().value(INDENT);
         }
 
         /**
@@ -192,7 +216,7 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
          * @since 4.0.0
          */
         public Builder nodeStyle(final @Nullable NodeStyle style) {
-            this.style = style;
+            this.optionStateBuilder().value(NODE_STYLE, style);
             return this;
         }
 
@@ -203,7 +227,7 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
          * @since 4.0.0
          */
         public @Nullable NodeStyle nodeStyle() {
-            return this.style;
+            return this.optionState().value(NODE_STYLE);
         }
 
         /**
@@ -265,12 +289,15 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
         }
     }
 
+    private final LoaderOptions loaderOpts;
+    private final DumperOptions dumperOpts;
+
     private final ThreadLocal<YamlConstructor> constructor;
     private final ThreadLocal<Yaml> yaml;
 
     private YamlConfigurationLoader(final Builder builder) {
         super(builder, new CommentHandler[] {CommentHandlers.HASH});
-        final LoaderOptions loaderOpts = new LoaderOptions()
+        this.loaderOpts = new LoaderOptions()
             .setAcceptTabs(true)
             .setProcessComments(builder.commentsEnabled());
         loaderOpts.setCodePointLimit(Integer.MAX_VALUE);
@@ -281,15 +308,18 @@ public final class YamlConfigurationLoader extends AbstractConfigurationLoader<C
         opts.setWidth(builder.lineLength());
         opts.setIndicatorIndent(builder.indent());
         opts.setIndentWithIndicator(true);
+
+        this.dumperOpts = builder.options;
+        this.dumperOpts.setDefaultFlowStyle(NodeStyle.asSnakeYaml(builder.optionState().value(Builder.NODE_STYLE)));
+        this.dumperOpts.setIndent(builder.optionState().value(Builder.INDENT));
+
         // the constructor needs ConfigurationOptions, which is only available when called (loadInternal)
         this.constructor = ThreadLocal.withInitial(() -> new YamlConstructor(loaderOpts));
-        this.yaml = ThreadLocal.withInitial(() -> new Yaml(this.constructor.get(), new YamlRepresenter(true, opts), opts, loaderOpts));
+        this.yaml = ThreadLocal.withInitial(() -> new Yaml(this.constructor.get(), new YamlRepresenter(true, this.dumperOpts), this.dumperOpts, this.loaderOpts));
     }
 
     @Override
     protected void loadInternal(final CommentedConfigurationNode node, final BufferedReader reader) {
-        // the constructor needs ConfigurationOptions for the to be created nodes
-        // and since it's a thread-local, this won't cause any issues
         this.constructor.get().options = node.options();
         node.from(this.yaml.get().load(reader));
     }
