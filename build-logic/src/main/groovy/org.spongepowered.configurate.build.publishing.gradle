@@ -144,3 +144,14 @@ tasks.withType(Sign).configureEach {
         !project.hasProperty("skipSigning")
     }
 }
+
+publishing {
+    repositories {
+        maven {
+            credentials {
+                username = "sonatypeUsername"
+                password = "sonatypePassword"
+            }
+        }
+    }
+}
