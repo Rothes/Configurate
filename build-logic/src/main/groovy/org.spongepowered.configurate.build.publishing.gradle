@@ -135,7 +135,7 @@ signing {
             useInMemoryPgpKeys(spongeSigningKey, spongeSigningPassword)
         }
     } else {
-        signatories = new PgpSignatoryProvider() // don't use gpg agent
+//        signatories = new PgpSignatoryProvider() // don't use gpg agent
     }
 }
 
